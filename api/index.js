@@ -42,11 +42,14 @@ app.get('/redirect', (req, res) => {
 
 app.get('/callback', async (req, res) => {
   const { oauth_token, oauth_verifier } = req.query;
-  const { ot, ots } = req.cookies || {};
+  const cookie = require('cookie');
+  const parsedCookies = cookie.parse(req.headers.cookie || '');
+  const ot = parsedCookies.ot;
+  const ots = parsedCookies.ots;
 
   console.log('OAuth callback received:', req.query);
 
-  if (!oauth_token || !oauth_verifier || !ot || !ots || oauth_token !== ot) {
+  if (!oauth_token || !oauth_verifier || !ot || !ots) {
     console.warn('OAuth verification failed');
     return res.status(400).send('OAuth verification failed.');
   }
@@ -93,6 +96,11 @@ app.get('/callback', async (req, res) => {
 });
 
 const cookieParser = require('cookie-parser');
+app.use(cookieParser());
+
+const server = require('http').createServer(app);
+module.exports = (req, res) => server.emit('request', req, res);
+
 app.use(cookieParser());
 
 const server = require('http').createServer(app);
