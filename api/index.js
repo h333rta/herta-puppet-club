@@ -1,12 +1,10 @@
 const express = require('express');
-const session = require('express-session');
 const { TwitterApi } = require('twitter-api-v2');
 require('dotenv').config();
 
-// Patch fetch for Node.js
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-
 const app = express();
+
 const client = new TwitterApi({
   appKey: process.env.TWITTER_API_KEY,
   appSecret: process.env.TWITTER_API_SECRET,
@@ -14,15 +12,6 @@ const client = new TwitterApi({
 
 const CALLBACK_URL = 'https://herta-puppet-club.vercel.app/callback';
 let puppetDB = {};
-
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'herta',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false, maxAge: 600000 },
-}));
-
-app.use(express.static('public'));
 
 app.get('/', (req, res) => {
   res.send(`<html><body>
@@ -34,9 +23,8 @@ app.get('/', (req, res) => {
 app.get('/login', async (req, res) => {
   try {
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
-    req.session.oauthToken = oauth_token;
-    req.session.oauthTokenSecret = oauth_token_secret;
-    res.redirect(url);
+    // redirect with tokens in URL so we don’t need sessions
+    res.redirect(`/callback?ot=${oauth_token}&ots=${oauth_token_secret}&redirect=${encodeURIComponent(url)}`);
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).send('Failed to generate Twitter auth link.');
@@ -44,19 +32,23 @@ app.get('/login', async (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier } = req.query;
-  const { oauthToken, oauthTokenSecret } = req.session;
+  const { oauth_token, oauth_verifier, ot, ots, redirect } = req.query;
 
-  if (!oauth_token || !oauth_verifier || oauth_token !== oauthToken) {
-    return res.status(400).send('Invalid OAuth request.');
+  // If user hasn't been to Twitter yet, redirect to X login
+  if (!oauth_token && ot && ots && redirect) {
+    return res.redirect(redirect);
+  }
+
+  if (!oauth_token || !oauth_verifier || !ot || !ots || oauth_token !== ot) {
+    return res.status(400).send('Invalid OAuth flow.');
   }
 
   try {
     const loginClient = new TwitterApi({
       appKey: process.env.TWITTER_API_KEY,
       appSecret: process.env.TWITTER_API_SECRET,
-      accessToken: oauthToken,
-      accessSecret: oauthTokenSecret,
+      accessToken: ot,
+      accessSecret: ots,
     });
 
     const { client: userClient } = await loginClient.login(oauth_verifier);
@@ -86,8 +78,9 @@ app.get('/callback', async (req, res) => {
   }
 });
 
-// Vercel expects a handler function, not app.listen
 const server = require('http').createServer(app);
+module.exports = (req, res) => server.emit('request', req, res);
+
 module.exports = (req, res) => server.emit('request', req, res);
 
 module.exports = app;
