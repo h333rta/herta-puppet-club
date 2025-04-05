@@ -1,4 +1,5 @@
 const express = require('express');
+const session = require('express-session');
 const { TwitterApi } = require('twitter-api-v2');
 require('dotenv').config();
 
@@ -13,6 +14,13 @@ const client = new TwitterApi({
 const CALLBACK_URL = 'https://herta-puppet-club.vercel.app/callback';
 let puppetDB = {};
 
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'puppetclub',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false, maxAge: 600000 },
+}));
+
 app.get('/', (req, res) => {
   res.send(`<html><body>
     <h1>Join the Herta Puppet Club</h1>
@@ -23,8 +31,10 @@ app.get('/', (req, res) => {
 app.get('/login', async (req, res) => {
   try {
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
-    console.log('Generated OAuth link:', url);
-    res.redirect(`/callback?ot=${oauth_token}&ots=${oauth_token_secret}&redirect=${encodeURIComponent(url)}`);
+    req.session.oauthToken = oauth_token;
+    req.session.oauthTokenSecret = oauth_token_secret;
+    console.log('Redirecting to Twitter:', url);
+    res.redirect(url);
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).send('Failed to generate Twitter auth link.');
@@ -32,27 +42,22 @@ app.get('/login', async (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, ot, ots, redirect } = req.query;
+  const { oauth_token, oauth_verifier } = req.query;
+  const { oauthToken, oauthTokenSecret } = req.session;
 
-  console.log('Callback query params:', req.query);
+  console.log('OAuth callback received:', req.query);
 
-  if (!oauth_token && ot && ots && redirect) {
-    console.log('Redirecting to Twitter OAuth URL...');
-    return res.redirect(redirect);
-  }
-
-  if (!oauth_token || !oauth_verifier || !ot || !ots) {
-    console.warn('Missing tokens in callback');
-    return res.status(400).send('Missing required tokens.');
+  if (!oauth_token || !oauth_verifier || oauth_token !== oauthToken) {
+    console.warn('OAuth verification failed');
+    return res.status(400).send('OAuth verification failed.');
   }
 
   try {
-    console.log('Attempting login with tokens');
     const loginClient = new TwitterApi({
       appKey: process.env.TWITTER_API_KEY,
       appSecret: process.env.TWITTER_API_SECRET,
-      accessToken: ot,
-      accessSecret: ots,
+      accessToken: oauthToken,
+      accessSecret: oauthTokenSecret,
     });
 
     const { client: userClient } = await loginClient.login(oauth_verifier);
@@ -90,6 +95,3 @@ app.get('/callback', async (req, res) => {
 
 const server = require('http').createServer(app);
 module.exports = (req, res) => server.emit('request', req, res);
-module.exports = (req, res) => server.emit('request', req, res);
-
-module.exports = app;
