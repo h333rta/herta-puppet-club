@@ -12,6 +12,7 @@ const client = new TwitterApi({
 
 const CALLBACK_URL = 'https://herta-puppet-club.vercel.app/callback';
 let puppetDB = {};
+const tokenMap = new Map(); // oauth_token -> oauth_token_secret
 
 app.get('/', (req, res) => {
   res.send(`<html><body>
@@ -23,27 +24,21 @@ app.get('/', (req, res) => {
 app.get('/login', async (req, res) => {
   try {
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
-    const redirectUrl = `/redirect?ot=${oauth_token}&ots=${oauth_token_secret}`;
-    res.redirect(redirectUrl);
+    tokenMap.set(oauth_token, oauth_token_secret);
+    res.redirect(url);
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).send('Failed to generate Twitter auth link.');
   }
 });
 
-app.get('/redirect', (req, res) => {
-  const { ot, ots } = req.query;
-  if (!ot || !ots) return res.status(400).send('Missing tokens.');
-  const twitterAuthUrl = `https://api.x.com/oauth/authenticate?oauth_token=${ot}`;
-  res.redirect(`${twitterAuthUrl}&ot=${ot}&ots=${ots}`);
-});
-
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, ot, ots } = req.query;
+  const { oauth_token, oauth_verifier } = req.query;
+  const oauth_token_secret = tokenMap.get(oauth_token);
 
   console.log('OAuth callback received:', req.query);
 
-  if (!oauth_token || !oauth_verifier || !ot || !ots) {
+  if (!oauth_token || !oauth_verifier || !oauth_token_secret) {
     console.warn('OAuth verification failed');
     return res.status(400).send('OAuth verification failed.');
   }
@@ -52,8 +47,8 @@ app.get('/callback', async (req, res) => {
     const loginClient = new TwitterApi({
       appKey: process.env.TWITTER_API_KEY,
       appSecret: process.env.TWITTER_API_SECRET,
-      accessToken: ot,
-      accessSecret: ots,
+      accessToken: oauth_token,
+      accessSecret: oauth_token_secret,
     });
 
     const { client: userClient } = await loginClient.login(oauth_verifier);
@@ -88,6 +83,9 @@ app.get('/callback', async (req, res) => {
     res.status(500).send('Something went wrong updating your profile.');
   }
 });
+
+const server = require('http').createServer(app);
+module.exports = (req, res) => server.emit('request', req, res);
 
 const server = require('http').createServer(app);
 module.exports = (req, res) => server.emit('request', req, res);
