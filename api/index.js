@@ -22,7 +22,7 @@ app.get('/', (req, res) => {
 
 app.get('/login', async (req, res) => {
   try {
-    const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
+    const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL, { state: `${oauth_token}--${oauth_token_secret}` });
     const redirectUrl = `/redirect?ot=${oauth_token}&ots=${oauth_token_secret}&url=${encodeURIComponent(url)}`;
     res.redirect(redirectUrl);
   } catch (err) {
@@ -39,7 +39,8 @@ app.get('/redirect', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, ot, ots } = req.query;
+  const { oauth_token, oauth_verifier, state } = req.query;
+  const [ot, ots] = (state || '').split('--');
   const oauth_token_secret = ots;
 
   console.log('OAuth callback received:', req.query);
