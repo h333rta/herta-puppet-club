@@ -12,6 +12,7 @@ const client = new TwitterApi({
 
 const CALLBACK_URL = 'https://herta-puppet-club.vercel.app/callback';
 let puppetDB = {};
+let tokenMap = {}; // Store oauth_token => secret temporarily
 
 app.get('/', (req, res) => {
   res.send(`<html><body>
@@ -23,9 +24,8 @@ app.get('/', (req, res) => {
 app.get('/login', async (req, res) => {
   try {
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
-    // Pass tokens directly through Twitter URL
-    const wrappedURL = `${url}&state=${oauth_token}--${oauth_token_secret}`;
-    res.redirect(wrappedURL);
+    tokenMap[oauth_token] = oauth_token_secret;
+    res.redirect(url);
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).send('Failed to generate Twitter auth link.');
@@ -33,12 +33,12 @@ app.get('/login', async (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, state } = req.query;
-  const [ot, ots] = (state || '').split('--');
+  const { oauth_token, oauth_verifier } = req.query;
+  const oauth_token_secret = tokenMap[oauth_token];
 
   console.log('OAuth callback received:', req.query);
 
-  if (!oauth_token || !oauth_verifier || !ot || !ots) {
+  if (!oauth_token || !oauth_verifier || !oauth_token_secret) {
     console.warn('OAuth verification failed');
     return res.status(400).send('OAuth verification failed.');
   }
@@ -47,8 +47,8 @@ app.get('/callback', async (req, res) => {
     const loginClient = new TwitterApi({
       appKey: process.env.TWITTER_API_KEY,
       appSecret: process.env.TWITTER_API_SECRET,
-      accessToken: ot,
-      accessSecret: ots,
+      accessToken: oauth_token,
+      accessSecret: oauth_token_secret,
     });
 
     const { client: userClient } = await loginClient.login(oauth_verifier);
