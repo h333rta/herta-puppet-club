@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
 app.get('/login', async (req, res) => {
   try {
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
-    const redirectUrl = `/redirect?ot=${oauth_token}&ots=${oauth_token_secret}&url=${encodeURIComponent(url)}`;
+    const redirectUrl = `/redirect?ot=${oauth_token}&ots=${oauth_token_secret}`;
     res.redirect(redirectUrl);
   } catch (err) {
     console.error('Login error:', err);
@@ -32,20 +32,18 @@ app.get('/login', async (req, res) => {
 });
 
 app.get('/redirect', (req, res) => {
-  const { ot, ots, url } = req.query;
-  if (!ot || !ots || !url) return res.status(400).send('Missing token redirect info.');
-  // Append both ot and ots into the callback state manually
-  const finalUrl = `${url}&state=${ot}--${ots}`;
-  res.redirect(finalUrl);
+  const { ot, ots } = req.query;
+  if (!ot || !ots) return res.status(400).send('Missing tokens.');
+  const twitterAuthUrl = `https://api.x.com/oauth/authenticate?oauth_token=${ot}`;
+  res.redirect(`${twitterAuthUrl}&ot=${ot}&ots=${ots}`);
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, state } = req.query;
-  const [ot, ots] = (state || '').split('--');
+  const { oauth_token, oauth_verifier, ot, ots } = req.query;
 
   console.log('OAuth callback received:', req.query);
 
-  if (!oauth_token || !oauth_verifier || !ot || !ots || oauth_token !== ot) {
+  if (!oauth_token || !oauth_verifier || !ot || !ots) {
     console.warn('OAuth verification failed');
     return res.status(400).send('OAuth verification failed.');
   }
