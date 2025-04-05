@@ -22,8 +22,9 @@ app.get('/', (req, res) => {
 
 app.get('/login', async (req, res) => {
   try {
-    const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL, { state: `${oauth_token}--${oauth_token_secret}` });
-    const redirectUrl = `/redirect?ot=${oauth_token}&ots=${oauth_token_secret}&url=${encodeURIComponent(url)}`;
+    const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
+    const encoded = Buffer.from(`${oauth_token}--${oauth_token_secret}`).toString('base64');
+    const redirectUrl = `/redirect?wrapped=${encoded}&url=${encodeURIComponent(url)}`;
     res.redirect(redirectUrl);
   } catch (err) {
     console.error('Login error:', err);
@@ -32,15 +33,14 @@ app.get('/login', async (req, res) => {
 });
 
 app.get('/redirect', (req, res) => {
-  const { ot, ots, url } = req.query;
-  if (!ot || !ots || !url) return res.status(400).send('Missing tokens.');
-  // Redirect to Twitter and preserve tokens in our URL
-  res.redirect(`${url}&ot=${ot}&ots=${ots}`);
+  const { wrapped, url } = req.query;
+  if (!wrapped || !url) return res.status(400).send('Missing tokens.');
+  res.redirect(`${url}&wrapped=${wrapped}`);
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, state } = req.query;
-  const [ot, ots] = (state || '').split('--');
+  const { oauth_token, oauth_verifier, wrapped } = req.query;
+  const [ot, ots] = wrapped ? Buffer.from(wrapped, 'base64').toString().split('--') : [];
   const oauth_token_secret = ots;
 
   console.log('OAuth callback received:', req.query);
