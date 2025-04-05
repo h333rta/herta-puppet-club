@@ -41,9 +41,9 @@ app.get('/callback', async (req, res) => {
     return res.redirect(redirect);
   }
 
-  if (!oauth_token || !oauth_verifier || !ot || !ots || oauth_token !== ot) {
-    console.warn('OAuth verification failed');
-    return res.status(400).send('Invalid OAuth flow.');
+  if (!oauth_token || !oauth_verifier || !ot || !ots) {
+    console.warn('Missing tokens in callback');
+    return res.status(400).send('Missing required tokens.');
   }
 
   try {
@@ -89,6 +89,7 @@ app.get('/callback', async (req, res) => {
 });
 
 const server = require('http').createServer(app);
+module.exports = (req, res) => server.emit('request', req, res);
 module.exports = (req, res) => server.emit('request', req, res);
 
 module.exports = app;
