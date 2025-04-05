@@ -1,8 +1,10 @@
 const express = require('express');
 const session = require('express-session');
 const { TwitterApi } = require('twitter-api-v2');
-const fs = require('fs');
 require('dotenv').config();
+
+// Patch fetch for Node.js
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,9 +17,8 @@ const client = new TwitterApi({
 // Use deployed URL for Vercel
 const CALLBACK_URL = 'https://herta-puppet-club.vercel.app/callback';
 
-// Store users and their puppet numbers
-const dbPath = './puppets.json';
-let puppetDB = fs.existsSync(dbPath) ? JSON.parse(fs.readFileSync(dbPath)) : {};
+// Store users and their puppet numbers (in memory, resets on cold start)
+let puppetDB = {};
 
 app.use(session({ secret: process.env.SESSION_SECRET || 'herta', resave: false, saveUninitialized: true }));
 app.use(express.static('public'));
@@ -58,7 +59,6 @@ app.get('/callback', async (req, res) => {
   if (!puppetDB[user.data.id]) {
     puppetNum = Object.keys(puppetDB).length + 1;
     puppetDB[user.data.id] = puppetNum;
-    fs.writeFileSync(dbPath, JSON.stringify(puppetDB, null, 2));
   } else {
     puppetNum = puppetDB[user.data.id];
   }
