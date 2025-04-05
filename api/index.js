@@ -100,8 +100,3 @@ app.use(cookieParser());
 
 const server = require('http').createServer(app);
 module.exports = (req, res) => server.emit('request', req, res);
-
-app.use(cookieParser());
-
-const server = require('http').createServer(app);
-module.exports = (req, res) => server.emit('request', req, res);
