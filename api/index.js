@@ -23,7 +23,8 @@ app.get('/', (req, res) => {
 app.get('/login', async (req, res) => {
   try {
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(CALLBACK_URL);
-    const redirectUrl = `/redirect?ot=${oauth_token}&ots=${oauth_token_secret}&url=${encodeURIComponent(url)}`;
+    const wrapped = Buffer.from(`${oauth_token}--${oauth_token_secret}`).toString('base64');
+    const redirectUrl = `/redirect?wrapped=${wrapped}&url=${encodeURIComponent(url)}`;
     res.redirect(redirectUrl);
   } catch (err) {
     console.error('Login error:', err);
@@ -32,13 +33,15 @@ app.get('/login', async (req, res) => {
 });
 
 app.get('/redirect', (req, res) => {
-  const { ot, ots, url } = req.query;
-  if (!ot || !ots || !url) return res.status(400).send('Missing tokens.');
-  res.redirect(`${url}&ot=${encodeURIComponent(ot)}&ots=${encodeURIComponent(ots)}`);
+  const { wrapped, url } = req.query;
+  if (!wrapped || !url) return res.status(400).send('Missing tokens.');
+  const redirectUrl = `${url}&wrapped=${wrapped}`;
+  res.redirect(redirectUrl);
 });
 
 app.get('/callback', async (req, res) => {
-  const { oauth_token, oauth_verifier, ot, ots } = req.query;
+  const { oauth_token, oauth_verifier, wrapped } = req.query;
+  const [ot, ots] = wrapped ? Buffer.from(wrapped, 'base64').toString().split('--') : [];
   const oauth_token_secret = ots;
 
   console.log('OAuth callback received:', req.query);
